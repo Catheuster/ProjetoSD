@@ -3,9 +3,9 @@ import struct
 import threading
 
 #definindo o endereço IP do host
-SERVER_HOST = ""
+MANAGER_HOST = "localhost"
 #definindo o número da porta em que o servidor irá escutar pelas requisições HTTP
-SERVER_PORT = 8080
+MANAGER_PORT = 8080
 
 capacidadeMax = 0
 capacidadeAtual = 0

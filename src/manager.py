@@ -14,22 +14,17 @@ def requestHandler(client_connection, client_adress):
     # verifica se a request possui algum conteúdo (pois alguns navegadores ficam periodicamente enviando alguma string vazia)
     clienteAtual = None
     # pega a solicitação do cliente
-    request = None
+    request = "Hello, you did it"
     if request:
         # imprime a solicitação do cliente
-        # print(request)
-
-        # analisa a solicitação HTTP
-        headers = request.split("\n")
-        # pega o nome do arquivo sendo solicitado
-        filename = headers[0].split()[1]
-        requestType = headers[0].split()[0]
+        print("lets just 'ping' back")
         # verifica qual arquivo está sendo solicitado e envia a resposta para o cliente
 
         # envia a resposta
         response = "DEFAULT RESPONSE"
+        response = request
         client_connection.sendall(response.encode())
-        #client_connection.close() #close only when logout
+        client_connection.close() #close only when logout
 
 def broadcastReq(cliente,arquivo):
     pass
@@ -82,3 +77,7 @@ def main():
             client_thread.start()
     finally:
         server_socket.close()
+
+
+if __name__=="__main__":
+    main()
