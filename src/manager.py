@@ -11,20 +11,41 @@ usrConectados_g: dict = {}
 serverConectados_g: dict = {}
 
 def requestHandler(client_connection, client_adress):
-    # verifica se a request possui algum conteúdo (pois alguns navegadores ficam periodicamente enviando alguma string vazia)
-    clienteAtual = None
-    # pega a solicitação do cliente
-    request = "Hello, you did it"
-    if request:
-        # imprime a solicitação do cliente
-        print("lets just 'ping' back")
-        # verifica qual arquivo está sendo solicitado e envia a resposta para o cliente
 
-        # envia a resposta
-        response = "DEFAULT RESPONSE"
-        response = request
-        client_connection.sendall(response.encode())
-        client_connection.close() #close only when logout
+    while True:
+        # verifica se a request possui algum conteúdo (pois alguns navegadores ficam periodicamente enviando alguma string vazia)
+        clienteAtual = None
+        # pega a solicitação do cliente
+        request = "4 LOGOUT\nGEORGE\n"
+        if request:
+            headers = request.split("\n")
+            user = headers[1]
+            op = int(headers[0][0])
+            if not clienteAtual:
+                if op == 1:
+                    clienteAtual = userLogin(user,client_connection)
+                else:
+                    continue
+
+            match op:
+                case 0:
+                    response = "already logged in" #TODO logged in response
+                case 1:
+                    response = "ask file response" #TODO Ask file
+                case 2:
+                    response = "post file response" #TODO Post file
+                case 3:
+                    response = "ls response" #TODO LS
+                case 4:
+                    break 
+            
+            # imprime a solicitação do cliente
+            print("lets just 'ping' back")
+            # verifica qual arquivo está sendo solicitado e envia a resposta para o cliente
+            
+            # envia a resposta
+            client_connection.sendall(response.encode())
+    client_connection.close() #close only when logout
 
 def broadcastReq(cliente,arquivo):
     pass
