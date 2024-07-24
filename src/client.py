@@ -7,12 +7,12 @@ SERVER_HOST_g = "localhost"
 SERVER_PORT_g = 8080
 
 protocolo = {
-    "QANS" : "0 Question Answer",
+    "QANS" : "0 Question Answer\n",
     "LOGIN" : "1 Login Request\n",
     "ASKREQ" : "2 Request for File\n",
     "PUSH" : "3 Push File Warning\n",
-    "LS": "4 ls Request\n",
-    "LOGOUT": "5 Logout Warning",
+    "LS": "4 LS Request\n",
+    "LOGOUT": "5 Logout Warning\n",
 }
 
 def pushData(connection):
@@ -20,9 +20,9 @@ def pushData(connection):
     controlMessage = "Percorra o sistema de arquivos e selecione o que se deseja transferir utilizando os seguintes comandos:\nm-[NOME DO DIRETORIO] para mover de diretório.;\ns-[NOME DO ARQUIVO] para selecionar o arquivo para transferir\nc-[NADA] para cancelar a operação"
     currDirectory = os.path.expanduser("~")
     showcontrol = True
-    arquivo = None
+    arqPath = None
     #Selecting
-    while (arquivo==None):
+    while (arqPath==None):
         if (showcontrol):
             print(controlMessage)
             try:
@@ -38,40 +38,37 @@ def pushData(connection):
             print ("Arquivos do diretório atual:")
             print (*files,sep=" ",end="\n\n")
         cmd = input("Escolha o comando: ")
-        errmsg = "cmd vazio"
         try:
             if (cmd[0]=='m'):
                 currDirectory = os.path.join(currDirectory,cmd[2:])
             elif (cmd[0]=='s'):
                 arqPath = os.path.join(currDirectory,cmd[2:])
-                errmsg="arquivo selecionado inexistente"
-                f = open(arqPath,"r")
-                arquivo = (f.read(),cmd[2:])
-                f.close()
+                fileName = cmd[2:]
             elif (cmd[0]=='c'):
                 break
             else:
                 print("Comando inválido")
         except:
-            print(errmsg)
+            print("cmd vazio")
     #works up to here
     #TODO send
 
-    if(arquivo != None):
-        data, nome = arquivo
-        warnPush = protocolo["PUSH"]+credencial_g+"\n"+nome
-        towrite = True
-        #connection.sendall(warnPush.encode)
-        #1 já existe 0 nao existe
-        if (connection.recv(1028).decode()[0]==1):
-            ans = input("Deseja sobre escrever no destino?[Y/n]: ")
-            if (ans!="Y" and ans!="y"): towrite=False
-            ans = protocolo["QANS"]+credencial_g+"\n"+ans
-            connection.sendall(ans)
-        if (towrite):
-            pass
-            #Figure this shit out
+    sendByPath(connection,arqPath,fileName)
 
+def sendByPath(connection,path,name):
+    f=None
+    global credencial_g
+    try:
+        f=open(path)
+    except:
+        print("invalid file, cant open")
+
+    if f!=None:
+        warnMan = protocolo["PUSH"]+credencial_g+"\n+name"
+        connection.sendall(warnMan.encode())
+        #TODO break and send
+        connection.sendall(0)
+        print("send success")
 
 def pullArquivo(connection):
     global credencial_g

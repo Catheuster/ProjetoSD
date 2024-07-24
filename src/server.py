@@ -7,64 +7,61 @@ MANAGER_HOST = "localhost"
 #definindo o número da porta em que o servidor irá escutar pelas requisições HTTP
 MANAGER_PORT = 8080
 
-capacidadeMax = 0
-capacidadeAtual = 0
+protocolo = {
+    "FAIL" : "0 REQUEST FAIL\n",
+    "REGISTRATION" : "1 SERVER CLAIM\n",
+    "GOOD" : "2 REQUEST SUCCESS\n",
+    "REPL": "3 REPLICATE REQUEST\n"
+}
+class ServerUnit:
 
-def replicate(data,servidor):
-    pass
+    capacidadeAtual = 0
+    port = None
+    sock = None
+    pathToOwnedFolder = None
 
-def lsCall(connection):
-    pass
+    def __init__(self,folderNumber):
+        global MANAGER_HOST
+        global MANAGER_PORT
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(('', 0))
+        self.port = self.sock.getsockname()[1]
+        giveUP = False
+        try:
+            registrationSocket = socket.create_connection((MANAGER_HOST, MANAGER_PORT))
+            print("connection success")
+        except:
+            print("connection failed")
+            giveUP = True
+            self.fail()
 
-def fail():
-    pass
+        if not giveUP:
+            message = protocolo["REGISTRATION"]+self.port
+            registrationSocket.sendall(message.encode())
+            didIdoit = int(registrationSocket.recv(2048).decode().split('\n')[0][0])
+            if didIdoit==0:
+                self.fail()
+            else:
+                #TODO SETUP LISTEN RIGHT, SETUP FOLDER
+                pass
+        registrationSocket.close()
 
-def requestHandler(client_connection, client_adress):
-    # verifica se a request possui algum conteúdo (pois alguns navegadores ficam periodicamente enviando alguma string vazia)
-    clienteAtual = None
-    # pega a solicitação do cliente
-    request = None
-    if request:
-        # imprime a solicitação do cliente
-        # print(request)
 
-        # analisa a solicitação HTTP
-        headers = request.split("\n")
-        # pega o nome do arquivo sendo solicitado
-        filename = headers[0].split()[1]
-        requestType = headers[0].split()[0]
-        # verifica qual arquivo está sendo solicitado e envia a resposta para o cliente
+    def replicate(self,data,servidor):
+        pass
 
-        # envia a resposta
-        response = "DEFAULT RESPONSE"
-        client_connection.sendall(response.encode())
-        #client_connection.close() #close only when logout
+    def lsCall(self,connection):
+        pass
 
+    def fail(self):
+        pass
+
+    def requestHandler(self, client_connection, client_adress):
+        pass
+
+    def makeListen(self):
+        pass
 def main():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # vamos setar a opção de reutilizar sockets já abertos
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    # atrela o socket ao endereço da máquina e ao número de porta definido
-    server_socket.bind((SERVER_HOST, SERVER_PORT))
-
-    # coloca o socket para escutar por conexões
-    server_socket.listen(1)
-
-    # mensagem inicial do servidor
-    print("Servidor em execução...")
-    print("Escutando por conexões na porta %s" % SERVER_PORT)
-
-    # cria o while que irá receber as conexões
-    try:
-        while True:
-            # espera por conexões
-            # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
-            # client_address: tupla (IP do cliente, Porta do cliente)
-            client_connection, client_address = server_socket.accept()
-            client_thread = threading.Thread(target=requestHandler, args=(client_connection, client_address),
-                                             daemon=True)
-            client_thread.start()
-    finally:
-        server_socket.close()
+    #SETUP AT LEAST 4 SERVER UNITS
+    pass

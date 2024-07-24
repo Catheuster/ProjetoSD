@@ -5,51 +5,77 @@ import struct
 #definindo o endereço IP do host
 SERVER_HOST = ""
 #definindo o número da porta em que o servidor irá escutar pelas requisições HTTP
-SERVER_PORT = 8080
+SERVER_PORT_CLIENT = 8080
+SERVER_PORT_MAN = 2525
 
-usrConectados_g: dict = {}
 serverConectados_g: dict = {}
 
-def requestHandler(client_connection, client_adress):
+protocoloCliente = {
+    "FAIL" : "0 FAILURE\n",
+    "LOGIN" : "1 LOGIN SUCCESS\n",
+    "PWIN" : "2 PULL SUCCESS\n",
+    "UWIN" : "3 WIN SUCCESS\n",
+    "QWIN" : "4 LS QUERY SUCCESS\n",
+    "LOGOUT" : "5 LOGOUT SUCCESS\n",
+    "NOSERV" : "9 NO SERVERS\n"
+}
 
+protocoloServer = {
+    "FAIL" : "0 FAILURE\n",
+    "REGWIN": "1 REGISTRATION SUCCESS\n",
+    "REQFILE": "2 REQUEST FILE\n",
+    "REQLS": "3 REQUEST LS\n"
+}
+
+def requestHandler(client_connection, client_adress):
+    global serverConectados_g
+    clienteAtual = None
     while True:
         # verifica se a request possui algum conteúdo (pois alguns navegadores ficam periodicamente enviando alguma string vazia)
-        clienteAtual = None
-        # pega a solicitação do cliente
-        request = "4 LOGOUT\nGEORGE\n"
+
+        # pega a solicitação do cliente inicial de comunicação
+        request = client_connection.recv(2048)
         if request:
             headers = request.split("\n")
             user = headers[1]
+            body = headers[2]
             op = int(headers[0][0])
+            if not serverConectados_g:
+                message = protocoloCliente["NOSERV"]
+                client_connection.sendall(message.encode())
             if not clienteAtual:
                 if op == 1:
                     clienteAtual = userLogin(user,client_connection)
                 else:
                     continue
+            else:
+                match op:
+                    case 1:
+                        #TODO logged in response
+                        message=protocoloCliente["LOGIN"]+clienteAtual
+                        client_connection.sendall(message.encode())
+                    case 2:
+                        #TODO Ask file
+                        broadcastReq(client_connection,clienteAtual,body)
+                        pass
+                    case 3:
+                        #TODO Post file
+                        recieveFileToPush(client_connection,clienteAtual,body)
+                        pass
+                    case 4:
+                        #TODO LS
+                        pass
+                    case 5:
+                        break
+        else:
+            break
+        client_connection.close()
 
-            match op:
-                case 0:
-                    response = "already logged in" #TODO logged in response
-                case 1:
-                    response = "ask file response" #TODO Ask file
-                case 2:
-                    response = "post file response" #TODO Post file
-                case 3:
-                    response = "ls response" #TODO LS
-                case 4:
-                    break 
-            
-            # imprime a solicitação do cliente
-            print("lets just 'ping' back")
-            # verifica qual arquivo está sendo solicitado e envia a resposta para o cliente
-            
-            # envia a resposta
-            client_connection.sendall(response.encode())
-    client_connection.close() #close only when logout
-
-def broadcastReq(cliente,arquivo):
+def broadcastReq(connectionClient,cliente,arquivo):
     pass
 
+def broadcastLS(connection,cliente):
+    pass
 def targetPost(data,serverFirst,serverRepl):
     pass
 
@@ -61,30 +87,28 @@ def targetDecide():
 
 def userLogin(credencial, connection):
     #TODO send login confirm
+    message = protocoloCliente["LOGIN"]+credencial
+    connection.sendall(message.encode())
     return credencial
 
 def userLogout(credencial,connection):
-    #TODO send logout confirm
-    connection.close()
-
-def recieveBody(connection,address):
+    #NOT NEEDED
     pass
 
-def main():
+def recieveFileToPush(connection,user,fileName):
+    pass
+
+def listenClients():
+    global SERVER_PORT_CLIENT
+    global SERVER_HOST
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # vamos setar a opção de reutilizar sockets já abertos
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    # atrela o socket ao endereço da máquina e ao número de porta definido
-    server_socket.bind((SERVER_HOST, SERVER_PORT))
-
-    # coloca o socket para escutar por conexões
+    server_socket.bind((SERVER_HOST, SERVER_PORT_CLIENT))
     server_socket.listen(1)
 
     # mensagem inicial do servidor
-    print("Servidor em execução...")
-    print("Escutando por conexões na porta %s" % SERVER_PORT)
+    print("Servidor escutando clientes...")
+    print("Escutando por conexões na porta %s" % SERVER_PORT_CLIENT)
 
     # cria o while que irá receber as conexões
     try:
@@ -99,6 +123,34 @@ def main():
     finally:
         server_socket.close()
 
+def listenServers():
+    global SERVER_HOST
+    global SERVER_PORT_MAN
+    global serverConectados_g
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.bind((SERVER_HOST, SERVER_PORT_MAN))
+    server_socket.listen(1)
+
+    # mensagem inicial do servidor
+    print("Servidor escudando servidores...")
+    print("Escutando por conexões na porta %s" % SERVER_PORT_MAN)
+
+    # cria o while que irá receber as conexões
+    try:
+        while True:
+            # espera por conexões
+            # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
+            # client_address: tupla (IP do cliente, Porta do cliente)
+            server_connection, server_address = server_socket.accept()
+    finally:
+        server_socket.close()
+
+def main():
+    client_man_thread = threading.Thread(target=listenClients(), daemon=True)
+    server_man_thread = threading.Thread(target=listenServers(), daemon=True)
+    client_man_thread.start()
+    server_man_thread.start()
 
 if __name__=="__main__":
     main()
