@@ -24,7 +24,9 @@ protocoloServer = {
     "FAIL" : "0 FAILURE\n",
     "REGWIN": "1 REGISTRATION SUCCESS\n",
     "REQFILE": "2 REQUEST FILE\n",
-    "REQLS": "3 REQUEST LS\n"
+    "REQLS": "3 REQUEST LS\n",
+    "UPR": "4 UPLOAD REQUEST\n",
+    "UPW": "5 UPLOAD WARNING\n"
 }
 
 def requestHandler(client_connection, client_adress):

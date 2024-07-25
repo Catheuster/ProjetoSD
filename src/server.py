@@ -1,6 +1,7 @@
 import socket
-import struct
+import os
 import threading
+import tempfile
 
 #definindo o endereço IP do host
 MANAGER_HOST = "localhost"
@@ -10,8 +11,8 @@ MANAGER_PORT = 8080
 protocolo = {
     "FAIL" : "0 REQUEST FAIL\n",
     "REGISTRATION" : "1 SERVER CLAIM\n",
-    "GOOD" : "2 REQUEST SUCCESS\n",
-    "REPL": "3 REPLICATE REQUEST\n"
+    "GOOD" : "2 REQUEST SUCCESS, SEND WARNING\n",
+    "REPL": "9 REPLICATE REQUEST\n"
 }
 class ServerUnit:
 
@@ -19,6 +20,7 @@ class ServerUnit:
     port = None
     sock = None
     pathToOwnedFolder = None
+    I_listen = False
 
     def __init__(self,folderNumber):
         global MANAGER_HOST
@@ -47,21 +49,77 @@ class ServerUnit:
                 pass
         registrationSocket.close()
 
-
-    def replicate(self,data,servidor):
+    def takeData(self,connection,user):
+        #TODO figure this shi out
+        pass
+    def replicate(self,data,portServ):
         pass
 
-    def lsCall(self,connection):
+    def sendFile(self,connection,file):
+        message = protocolo["GOOD"]
+        connection.sendall(message)
+        #TODO Figure this shi out
+
+    def upRequest(self,connection,usr,file):
         pass
+
+    def fetch(self,connection,usr,file):
+        pass
+    def lsCall(self,connection,user):
+        usrDir = os.path.join(self.pathToOwnedFolder,user)
+        try:
+            root, dirs, files = (os.walk(usrDir))
+            #TODO make text file and send over
+            tmpf = tempfile.TemporaryFile() #already in binary mode
+            tmpf.write(("\n".join(files)).encode())
+            self.sendFile(connection, tmpf)
+            tmpf.close() #immediatly kills it
+            #should have only files as we do not have make dir functionality
+        except:
+            print("no folder of user")
+            message = protocolo["FAIL"]
+            connection.sendall(message.encode())
 
     def fail(self):
-        pass
+        self.sock.close() #may have other things
 
-    def requestHandler(self, client_connection, client_adress):
-        pass
+    def requestHandler(self, connection, address):
+        request = connection.recv(2048).decode().split("\n")
+        try:
+            #why you calling me?
+            op = int(request[0][0])
+            user = request[1]
+            match op:
+                case 9:
+                    #oh a replicate request, alright
+                    #overwrite always true in replicate
+                    self.takeData(connection,user)
+                case 2:
+                    fileName = request[2]
+                    self.fetch(connection,user,fileName)
+                case 3:
+                    self.lsCall(connection,user)
+                case 4:
+                    fileName = request[2]
+                    self.upRequest(connection,user,fileName)
+        except:
+            print("malformed request")
+        connection.close()
+
 
     def makeListen(self):
-        pass
+        self.I_listen=True
+        try:
+            while self.I_listen:
+                # espera por conexões
+                # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
+                # client_address: tupla (IP do cliente, Porta do cliente)
+                connection, address = self.sock.accept()
+                client_thread = threading.Thread(target=self.requestHandler, args=(connection, address),
+                                                 daemon=True)
+                client_thread.start()
+        finally:
+            self.fail()
 def main():
     #SETUP AT LEAST 4 SERVER UNITS
     pass
