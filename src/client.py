@@ -101,6 +101,7 @@ def controlMain():
     connectionSocket = None
     try:
         connectionSocket = socket.create_connection((SERVER_HOST_g,SERVER_PORT_g))
+        connectionSocket.setsockopt(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)
         login(connectionSocket,credencial_g)
         print("connection success")
     except:
@@ -110,7 +111,6 @@ def controlMain():
     while (maintainFunc):
         try:
             if (showCommands):
-                print("Envie 0 para receber")
                 print("Envie 1 para enviar")
                 print("Envie 2 para buscar")
                 print("Envie 3 para ls")
@@ -119,9 +119,7 @@ def controlMain():
             command = int(input("Escolha comando: "))
             #f-this
             showCommands=True
-            if (command==0):
-                print(connectionSocket.recv(1028).decode()) #test code
-            elif (command==1):
+            if (command==1):
                 pushData(connectionSocket)
             elif (command==2):
                 pullArquivo(connectionSocket)

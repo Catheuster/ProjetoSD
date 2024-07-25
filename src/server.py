@@ -11,7 +11,7 @@ MANAGER_PORT = 2525
 protocolo = {
     "FAIL" : "0 REQUEST FAIL\n",
     "REGISTRATION" : "1 SERVER CLAIM\n",
-    "GOOD" : "2 REQUEST SUCCESS, SEND WARNING\n",
+    "GOOD" : "2 REQUEST SUCCESS\n",
     "REPL": "9 REPLICATE REQUEST\n"
 }
 
@@ -54,32 +54,57 @@ class ServerUnit:
                 
             registrationSocket.close()
 
-    def takeData(self,connection,user):
+    def takeData(self,connection,user,fileName):
         #TODO figure this shi out
         pass
-    def replicate(self,data,portServ):
+    def replicate(self,usr,fileName,secdnServ):
+        #when called, should have already taken
         pass
 
-    def sendFile(self,connection,file):
-        message = protocolo["GOOD"]
-        connection.sendall(message)
+    def sendFile(self,connection,filePath):
+        pass
+
+    def askForFile(self,connection,usr,fileName):
+        f = self.fetch(usr,fileName)
+        if f:
+            message = protocolo["GOOD"]
+            connection.sendall(message)
+            action = connection.recv(2048).decode()[0]
+            if (action==5):
+                #SEND OVER TODO figure this shi out
+                self.sendFile(connection,f)
+                pass
+            elif (action==6):
+                os.remove(f)
+        else:
+            message = protocolo["FAIL"]
+            connection.sendall(message)
+        #recv go
         #TODO Figure this shi out
 
-    def upRequest(self,connection,usr,file):
-        pass
+    def delete(self,usr,fileName):
+        usrfile = self.fetch(usr,fileName)
+        if usrfile:
+            os.remove(usrfile)
 
-    def fetch(self,connection,usr,file):
-        pass
+    def fetch(self,usr,fileName):
+        usrfile = os.path.join(usr,fileName)
+        completePath = os.path.join(self.pathToOwnedFolder,usrfile)
+        if (os.path.exists(completePath)):
+            return completePath
+        return None
 
     def lsCall(self,connection,user):
         usrDir = os.path.join(self.pathToOwnedFolder,user)
         try:
-            root, dirs, files = (os.walk(usrDir))
+            _, _, files = (os.walk(usrDir))
             #TODO make text file and send over
-            tmpf = tempfile.TemporaryFile() #already in binary mode
+            tmpf = tempfile.NamedTemporaryFile(delete=False) #already in binary mode
+            location = tmpf.name
             tmpf.write(("\n".join(files)).encode())
-            self.sendFile(connection, tmpf)
-            tmpf.close() #immediatly kills it
+            tmpf.close()
+            self.sendFile(connection, location)
+            os.remove(location)
             #should have only files as we do not have make dir functionality
         except:
             print("no folder of user")
@@ -102,15 +127,17 @@ class ServerUnit:
                 case 9:
                     #oh a replicate request, alright
                     #overwrite always true in replicate
-                    self.takeData(connection,user)
+                    self.takeData(connection,user,fileName)
                 case 2:
                     fileName = request[2]
-                    self.fetch(connection,user,fileName)
+                    self.askForFile(connection,user,fileName)
                 case 3:
                     self.lsCall(connection,user)
                 case 4:
                     fileName = request[2]
-                    self.upRequest(connection,user,fileName)
+                    otherServPort = request[3]
+                    self.takeData(connection,user,fileName)
+                    self.replicate(user,fileName,otherServPort)
         except:
             print("malformed request")
         connection.close()

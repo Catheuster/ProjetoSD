@@ -25,9 +25,12 @@ protocoloServer = {
     "REGWIN": "1 REGISTRATION SUCCESS\n",
     "REQFILE": "2 REQUEST FILE\n",
     "REQLS": "3 REQUEST LS\n",
-    "UPR": "4 UPLOAD REQUEST\n",
-    "UPW": "5 UPLOAD WARNING\n"
+    "UPR": "4 UPLOAD WARNING\n",
+    "BRING": "5 SEND OVER\n",
+    "DELETE": "6 KILL IT\n",
+    "CAUSE REPLICATE": "9 REPLICATE\n"
 }
+# caso CAUSE REPLICATE 9 é só para ser usado se un número insuficiente de servidores responderam a uma 2 REQUEST FILE
 
 def requestHandler(client_connection, client_adress):
     global serverConectados_g
@@ -119,6 +122,7 @@ def listenClients():
             # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
             # client_address: tupla (IP do cliente, Porta do cliente)
             client_connection, client_address = server_socket.accept()
+            client_connection.setsockopt(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)
             client_thread = threading.Thread(target=requestHandler, args=(client_connection, client_address),
                                              daemon=True)
             client_thread.start()
