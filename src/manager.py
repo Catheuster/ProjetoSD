@@ -8,7 +8,7 @@ SERVER_HOST = ""
 SERVER_PORT_CLIENT = 8080
 SERVER_PORT_MAN = 2525
 
-serverConectados_g: dict = {}
+serverConectados_g = []
 
 protocoloCliente = {
     "FAIL" : "0 FAILURE\n",
@@ -141,18 +141,28 @@ def listenServers():
     # cria o while que irá receber as conexões
     try:
         while True:
-            # espera por conexões
-            # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
-            # client_address: tupla (IP do cliente, Porta do cliente)
             server_connection, server_address = server_socket.accept()
+            message = (server_connection.recv(1028).decode()).split("\n")
+            try:
+                if int(message[0][0]) == 1:
+                    serverWorkingAddress = (server_address[0],int(message[1]))
+                    print("registered server of port", serverWorkingAddress[1])
+                    serverConectados_g.append(serverWorkingAddress)
+                    message = protocoloServer["REGWIN"]
+                    server_connection.sendall(message.encode())
+            except:
+                print("poorly written registration")
+            
     finally:
         server_socket.close()
 
 def main():
-    client_man_thread = threading.Thread(target=listenClients(), daemon=True)
-    server_man_thread = threading.Thread(target=listenServers(), daemon=True)
+    client_man_thread = threading.Thread(target=listenClients, daemon=True)
+    server_man_thread = threading.Thread(target=listenServers, daemon=True)
     client_man_thread.start()
     server_man_thread.start()
+    client_man_thread.join()
+    server_man_thread.join()
 
 if __name__=="__main__":
     main()

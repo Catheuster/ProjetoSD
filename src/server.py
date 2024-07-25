@@ -6,7 +6,7 @@ import tempfile
 #definindo o endereço IP do host
 MANAGER_HOST = "localhost"
 #definindo o número da porta em que o servidor irá escutar pelas requisições HTTP
-MANAGER_PORT = 8080
+MANAGER_PORT = 2525
 
 protocolo = {
     "FAIL" : "0 REQUEST FAIL\n",
@@ -14,6 +14,7 @@ protocolo = {
     "GOOD" : "2 REQUEST SUCCESS, SEND WARNING\n",
     "REPL": "9 REPLICATE REQUEST\n"
 }
+
 class ServerUnit:
 
     capacidadeAtual = 0
@@ -29,6 +30,11 @@ class ServerUnit:
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(('', 0))
         self.port = self.sock.getsockname()[1]
+        #making folder
+        parent = os.path.join(os.getcwd(),"VirtualServers")
+        self.pathToOwnedFolder = os.path.join(parent,str(folderNumber))
+        if not os.path.isdir(self.pathToOwnedFolder):
+            os.mkdir(self.pathToOwnedFolder)
         giveUP = False
         try:
             registrationSocket = socket.create_connection((MANAGER_HOST, MANAGER_PORT))
@@ -39,15 +45,14 @@ class ServerUnit:
             self.fail()
 
         if not giveUP:
-            message = protocolo["REGISTRATION"]+self.port
+            message = protocolo["REGISTRATION"]+str(self.port)
+            #following should be in try catch
             registrationSocket.sendall(message.encode())
             didIdoit = int(registrationSocket.recv(2048).decode().split('\n')[0][0])
-            if didIdoit==0:
+            if didIdoit!=1:
                 self.fail()
-            else:
-                #TODO SETUP LISTEN RIGHT, SETUP FOLDER
-                pass
-        registrationSocket.close()
+                
+            registrationSocket.close()
 
     def takeData(self,connection,user):
         #TODO figure this shi out
@@ -65,6 +70,7 @@ class ServerUnit:
 
     def fetch(self,connection,usr,file):
         pass
+
     def lsCall(self,connection,user):
         usrDir = os.path.join(self.pathToOwnedFolder,user)
         try:
@@ -81,7 +87,10 @@ class ServerUnit:
             connection.sendall(message.encode())
 
     def fail(self):
-        self.sock.close() #may have other things
+        if self.sock:
+            print("shutting server down of port",self.port)
+            self.sock.close() #may have other things
+        self.sock = None
 
     def requestHandler(self, connection, address):
         request = connection.recv(2048).decode().split("\n")
@@ -107,19 +116,35 @@ class ServerUnit:
         connection.close()
 
 
-    def makeListen(self):
+    def listening(self):
+        self.sock.listen(1)
         self.I_listen=True
-        try:
-            while self.I_listen:
-                # espera por conexões
-                # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
-                # client_address: tupla (IP do cliente, Porta do cliente)
-                connection, address = self.sock.accept()
-                client_thread = threading.Thread(target=self.requestHandler, args=(connection, address),
-                                                 daemon=True)
-                client_thread.start()
-        finally:
-            self.fail()
+        if self.sock:
+            try:
+                while self.I_listen:
+                    # espera por conexões
+                    # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
+                    # client_address: tupla (IP do cliente, Porta do cliente)
+                    connection, address = self.sock.accept()
+                    client_thread = threading.Thread(target=self.requestHandler, args=(connection, address),
+                                                    daemon=True)
+                    client_thread.start()
+            finally:
+                self.fail()
+
+    def startListen(self):
+        hear = threading.Thread(target=self.listening,daemon=True)
+        hear.start()
+    
 def main():
-    #SETUP AT LEAST 4 SERVER UNITS
-    pass
+    servers = []
+    for i in range(4):
+        servers.append(ServerUnit(i))
+    for unit in servers:
+        unit.startListen()
+    input("press anything to kill them all")
+    for unit in servers:
+        unit.fail()
+    
+if __name__=="__main__":
+    main()
