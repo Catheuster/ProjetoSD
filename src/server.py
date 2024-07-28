@@ -2,6 +2,7 @@ import socket
 import os
 import threading
 import tempfile
+import struct
 
 #definindo o endereço IP do host
 MANAGER_HOST = "localhost"
@@ -12,6 +13,7 @@ protocolo = {
     "FAIL" : "0 REQUEST FAIL\n",
     "REGISTRATION" : "1 SERVER CLAIM\n",
     "GOOD" : "2 REQUEST SUCCESS\n",
+    "READY": "8 READY\n",
     "REPL": "9 REPLICATE REQUEST\n"
 }
 
@@ -55,31 +57,91 @@ class ServerUnit:
             registrationSocket.close()
 
     def takeData(self,connection,user,fileName):
-        #TODO figure this shi out
-        pass
-    def replicate(self,usr,fileName,secdnServ):
-        #when called, should have already taken
+        #making file
+        insideLoc = os.path.join(self.pathToOwnedFolder,user)
+        if (not os.path.isdir(insideLoc)):
+            os.mkdir(insideLoc)
+        abspath = os.path.join(insideLoc,fileName)
+        #print("going here>> "+repr(abspath))
+        try :
+            with open(abspath,"wb") as f:
+                #I confirm intent do take
+                msg = protocolo["READY"]
+                connection.sendall(msg.encode())
+                bla = connection.recv(struct.calcsize("<Q"))
+                print(struct.unpack("<Q",bla))
+                ullSize = struct.unpack("<Q",bla)[0]
+                connection.sendall(msg.encode())
+                data = bytes()
+                now = 0
+                while now < ullSize:
+                    chunk = connection.recv(2048)
+                    now += len(chunk)
+                    data += chunk
+                f.write(data)
+        except Exception as e:
+            print("takedata failure")
+            print(repr(e))
         pass
 
     def sendFile(self,connection,filePath):
+        #should be guarded, no none filePath
+        if filePath:
+            #just in case
+            #connected should be already warned and waiting for file size
+            ulliSize = os.path.getsize(filePath)
+            connection.sendall(struct.pack("<Q",ulliSize))
+            #get confirmed
+            conf = connection.recv(2048).decode()
+            if int(conf[0]) == 8:
+                #alright send data
+                with open(filePath,"rb") as data:
+                    connection.sendall(data.read())
+            else:
+                print("failure, no confirmation after sendFile size")
+
+    def replicate(self,usr,fileName,secdnServ):
+        #when called, should have already taken
+        f = self.fetch(usr,fileName)
+        if f:
+            #connect only and call sendFile
+            doit = True
+            try:
+                #localhost vibes go so local
+                connectionSocket = socket.create_connection(("localhost",secdnServ))
+            except:
+                print("connection failed at serverxserver replicate")
+                doit = False
+            if doit:
+                hello = protocolo["REPL"]+usr+"\n"+fileName
+                connectionSocket.sendall(hello.encode())
+                conf = connectionSocket.recv(2048).decode()
+                if int(conf[0])==8:
+                    self.sendFile(connectionSocket,f)
+            #then dc
+            connectionSocket.close()
+        else:
+            print("replicate called but no file")
         pass
 
     def askForFile(self,connection,usr,fileName):
         f = self.fetch(usr,fileName)
         if f:
             message = protocolo["GOOD"]
-            connection.sendall(message)
-            action = connection.recv(2048).decode()[0]
-            if (action==5):
+            connection.sendall(message.encode())
+            action = connection.recv(2048).decode()
+            print(action)
+            if (int(action[0])==5):
                 #SEND OVER TODO figure this shi out
                 self.sendFile(connection,f)
                 pass
-            elif (action==6):
+            elif (int(action[0])==6):
                 os.remove(f)
+            #else, do nothing
         else:
             message = protocolo["FAIL"]
-            connection.sendall(message)
-        #recv go
+            connection.sendall(message.encode())
+        #closing is done by main interaction thread
         #TODO Figure this shi out
 
     def delete(self,usr,fileName):
@@ -119,6 +181,7 @@ class ServerUnit:
 
     def requestHandler(self, connection, address):
         request = connection.recv(2048).decode().split("\n")
+        print(repr(request))
         try:
             #why you calling me?
             op = int(request[0][0])
@@ -127,6 +190,7 @@ class ServerUnit:
                 case 9:
                     #oh a replicate request, alright
                     #overwrite always true in replicate
+                    fileName = request[2]
                     self.takeData(connection,user,fileName)
                 case 2:
                     fileName = request[2]
@@ -137,9 +201,9 @@ class ServerUnit:
                     fileName = request[2]
                     otherServPort = request[3]
                     self.takeData(connection,user,fileName)
-                    self.replicate(user,fileName,otherServPort)
-        except:
-            print("malformed request")
+                    self.replicate(user,fileName,int(otherServPort))
+        except Exception as e:
+            print(repr(e))
         connection.close()
 
 
@@ -153,6 +217,7 @@ class ServerUnit:
                     # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
                     # client_address: tupla (IP do cliente, Porta do cliente)
                     connection, address = self.sock.accept()
+                    connection.setsockopt(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)
                     client_thread = threading.Thread(target=self.requestHandler, args=(connection, address),
                                                     daemon=True)
                     client_thread.start()

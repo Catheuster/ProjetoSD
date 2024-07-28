@@ -1,6 +1,8 @@
 import threading
 import socket
 import struct
+import os
+import tempfile
 
 #definindo o endereço IP do host
 SERVER_HOST = ""
@@ -17,6 +19,8 @@ protocoloCliente = {
     "UWIN" : "3 WIN SUCCESS\n",
     "QWIN" : "4 LS QUERY SUCCESS\n",
     "LOGOUT" : "5 LOGOUT SUCCESS\n",
+    "READY": "7 READY",
+    "OVERWRITE": "8 OVERWRITE QUESTION\n",
     "NOSERV" : "9 NO SERVERS\n"
 }
 
@@ -28,6 +32,7 @@ protocoloServer = {
     "UPR": "4 UPLOAD WARNING\n",
     "BRING": "5 SEND OVER\n",
     "DELETE": "6 KILL IT\n",
+    "READY": "8 READY\n",
     "CAUSE REPLICATE": "9 REPLICATE\n"
 }
 # caso CAUSE REPLICATE 9 é só para ser usado se un número insuficiente de servidores responderam a uma 2 REQUEST FILE
@@ -39,7 +44,7 @@ def requestHandler(client_connection, client_adress):
         # verifica se a request possui algum conteúdo (pois alguns navegadores ficam periodicamente enviando alguma string vazia)
 
         # pega a solicitação do cliente inicial de comunicação
-        request = client_connection.recv(2048)
+        request = client_connection.recv(2048).decode()
         if request:
             headers = request.split("\n")
             user = headers[1]
@@ -48,7 +53,7 @@ def requestHandler(client_connection, client_adress):
             if not serverConectados_g:
                 message = protocoloCliente["NOSERV"]
                 client_connection.sendall(message.encode())
-            if not clienteAtual:
+            elif not clienteAtual:
                 if op == 1:
                     clienteAtual = userLogin(user,client_connection)
                 else:
@@ -59,13 +64,14 @@ def requestHandler(client_connection, client_adress):
                         #TODO logged in response
                         message=protocoloCliente["LOGIN"]+clienteAtual
                         client_connection.sendall(message.encode())
+                        pass
                     case 2:
                         #TODO Ask file
-                        broadcastReq(client_connection,clienteAtual,body)
+                        broadcastReq(client_connection,clienteAtual,body,mode=0)
                         pass
                     case 3:
                         #TODO Post file
-                        recieveFileToPush(client_connection,clienteAtual,body)
+                        broadcastReq(client_connection,clienteAtual,body,mode=1)
                         pass
                     case 4:
                         #TODO LS
@@ -74,33 +80,160 @@ def requestHandler(client_connection, client_adress):
                         break
         else:
             break
-        client_connection.close()
+    client_connection.close()
 
-def broadcastReq(connectionClient,cliente,arquivo):
-    pass
+def broadcastReq(connectionClient,cliente,fileName,mode=0):
+    #mode 0 when just pulling, mode 1 when pushing
+    #temporary to test
+    global serverConectados_g
+    hitlist = []
+    for serv in serverConectados_g:
+        try:
+            sock = socket.create_connection(serv)
+            sock.setsockopt(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)
+            msg = protocoloServer["REQFILE"]+cliente+"\n"+fileName
+            sock.sendall(msg.encode())
+            ans = (sock.recv(2048)).decode()
+            if (int(ans[0])==2):
+                hitlist.append(sock)
+            else:
+                sock.close()
+        except Exception as e:
+            print("failure at broadcast req server connect")
+            print(repr(e))
+    match mode:
+        case 1:
+            #pushing
+            if hitlist:
+                #ask overwrite
+                msgC = protocoloCliente["OVERWRITE"]
+                connectionClient.sendall(msgC.encode())
+                ans = (connectionClient.recv(2048)).decode()
+                if int(ans[0]) == 3:
+                    for sk in hitlist:
+                        msgS = protocoloServer["DELETE"]
+                        sk.sendall(msgS.encode())
+                        sk.close()
+                    takeAndSpread(connectionClient,cliente,fileName)
+                else:
+                    for sk in hitlist:
+                        msgS = protocoloServer["FAIL"]
+                        sk.sendall(msgS.encode())
+                        sk.close()
+            else:
+                takeAndSpread(connectionClient,cliente,fileName)
+        case 0:
+            #pulling
+            if hitlist:
+                #close others
+                msg = protocoloServer["FAIL"]
+                for sk in hitlist[1:]:
+                    sk.sendall(msg.encode())
+                    sk.close()
+                pullAndReturn(connectionClient,hitlist[0])
+            else:
+                msg = protocoloCliente["FAIL"]
+                connectionClient.sendall(msg.encode())
+    
+def takeAndSpread(sockC,cliente,filename):
+    tf = tempfile.NamedTemporaryFile(delete=False)
+    location = tf.name
+    try :
+        #I confirm intent do take
+        msg = protocoloCliente["READY"]
+        sockC.sendall(msg.encode())
+        #bla = sockC.recv(struct.calcsize("<Q"))
+        #print(bla)
+        ullSize = struct.unpack("<Q",sockC.recv(struct.calcsize("<Q")))[0]
+        #print("ullSize: "+repr(ullSize))
+        sockC.sendall(msg.encode())
+        data = bytes()
+        now = 0
+        while now < ullSize:
+            chunk = sockC.recv(2048)
+            now += len(chunk)
+            data += chunk
+        tf.write(data)
+    except Exception as e:
+        print("takedata failure")
+        print(repr(e))
+    finally:
+        tf.close()
+    targetList = targetDecide()
+    targetPost(location,cliente,filename,targetList[0],targetList[1:])
+    
+    os.remove(location)
+
+def pullAndReturn(sockC,sockS):
+    #socket is primed and waiting answer in askforFile
+    tf = tempfile.NamedTemporaryFile()
+    msg = protocoloServer["BRING"]
+    sockS.sendall(msg.encode())
+    ullSize = struct.unpack("<Q",sockC.recv(struct.calcsize("<Q")))[0]
+    msg = protocoloServer["READY"]
+    sockS.sendall(msg.encode())
+    data = sockS.recv(ullSize)
+    tf.write(data)
+
+    msg = protocoloCliente["PWIN"]
+    sockC.sendall(msg.encode())
+    conf = (sockC.recv(2048)).decode()
+    if int(conf[0])!=0:
+        ulliSize = os.path.getsize(tf.name)
+        sockC.sendall(struct.pack("<Q",ulliSize))
+        #get confirmed
+        conf = (sockC.recv(2048)).decode()
+        if int(conf[0]) == 8:
+            #alright send data
+            sockC.sendall(tf.read())
+        else:
+            print("failure, no confirmation after sendFile size")
+    tf.close()
 
 def broadcastLS(connection,cliente):
     pass
-def targetPost(data,serverFirst,serverRepl):
-    pass
 
-def targetPullBroadcast(cliente,arquivo):
-    pass
+def targetPost(filepath,cliente,filename,serverFirst,serverRepl):
+    #assume servers are responding
+    global serverConectados_g
+    ports = []
+    for i in serverRepl:
+        ports.append(str(serverConectados_g[i][1]))
+        
+    msg = protocoloServer["UPR"]+cliente+"\n"+filename+"\n"+(",".join(ports))
+    try:
+        sock = socket.create_connection(serverConectados_g[serverFirst])
+    except:
+        print("failure at target post connect")
+        return #screw this
+    sock.sendall(msg.encode())
+    ans = (sock.recv(2048)).decode()
+    if int(ans[0])==8:
+        ulliSize = os.path.getsize(filepath)
+        sock.sendall(struct.pack("<Q",ulliSize))
+        #get confirmed
+        conf = (sock.recv(2048)).decode()
+        if int(conf[0]) == 8:
+            #alright send data
+            with open(filepath,"rb") as data:
+                sock.sendall(data.read())
+        else:
+            print("failure, no confirmation after sendFile size")
+    else :
+        print("failure at target post")
+
 
 def targetDecide():
-    pass
+    return [0,1]
 
 def userLogin(credencial, connection):
     #TODO send login confirm
-    message = protocoloCliente["LOGIN"]+credencial
+    message = protocoloCliente["LOGIN"]+credencial+" ass"
     connection.sendall(message.encode())
     return credencial
 
 def userLogout(credencial,connection):
     #NOT NEEDED
-    pass
-
-def recieveFileToPush(connection,user,fileName):
     pass
 
 def listenClients():
@@ -146,7 +279,7 @@ def listenServers():
     try:
         while True:
             server_connection, server_address = server_socket.accept()
-            message = (server_connection.recv(1028).decode()).split("\n")
+            message = ((server_connection.recv(2048)).decode()).split("\n")
             try:
                 if int(message[0][0]) == 1:
                     serverWorkingAddress = (server_address[0],int(message[1]))
