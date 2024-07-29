@@ -90,6 +90,7 @@ class ServerUnit:
             #just in case
             #connected should be already warned and waiting for file size
             ulliSize = os.path.getsize(filePath)
+            print(ulliSize)
             connection.sendall(struct.pack("<Q",ulliSize))
             #get confirmed
             conf = connection.recv(2048).decode()
@@ -141,8 +142,6 @@ class ServerUnit:
         else:
             message = protocolo["FAIL"]
             connection.sendall(message.encode())
-        #closing is done by main interaction thread
-        #TODO Figure this shi out
 
     def delete(self,usr,fileName):
         usrfile = self.fetch(usr,fileName)
@@ -160,7 +159,6 @@ class ServerUnit:
         usrDir = os.path.join(self.pathToOwnedFolder,user)
         try:
             _, _, files = (os.walk(usrDir))
-            #TODO make text file and send over
             tmpf = tempfile.NamedTemporaryFile(delete=False) #already in binary mode
             location = tmpf.name
             tmpf.write(("\n".join(files)).encode())

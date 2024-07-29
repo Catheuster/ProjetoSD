@@ -142,10 +142,7 @@ def takeAndSpread(sockC,cliente,filename):
         #I confirm intent do take
         msg = protocoloCliente["READY"]
         sockC.sendall(msg.encode())
-        #bla = sockC.recv(struct.calcsize("<Q"))
-        #print(bla)
         ullSize = struct.unpack("<Q",sockC.recv(struct.calcsize("<Q")))[0]
-        #print("ullSize: "+repr(ullSize))
         sockC.sendall(msg.encode())
         data = bytes()
         now = 0
@@ -165,30 +162,31 @@ def takeAndSpread(sockC,cliente,filename):
     os.remove(location)
 
 def pullAndReturn(sockC,sockS):
-    #socket is primed and waiting answer in askforFile
-    tf = tempfile.NamedTemporaryFile()
     msg = protocoloServer["BRING"]
     sockS.sendall(msg.encode())
-    ullSize = struct.unpack("<Q",sockC.recv(struct.calcsize("<Q")))[0]
+    ulliSize = struct.unpack("<Q",sockS.recv(struct.calcsize("<Q")))[0]
     msg = protocoloServer["READY"]
     sockS.sendall(msg.encode())
-    data = sockS.recv(ullSize)
-    tf.write(data)
+    data = bytes()
+    now = 0
+    while now < ulliSize:
+        chunk = sockS.recv(2048)
+        now += len(chunk)
+        data += chunk
 
     msg = protocoloCliente["PWIN"]
     sockC.sendall(msg.encode())
     conf = (sockC.recv(2048)).decode()
     if int(conf[0])!=0:
-        ulliSize = os.path.getsize(tf.name)
         sockC.sendall(struct.pack("<Q",ulliSize))
         #get confirmed
         conf = (sockC.recv(2048)).decode()
         if int(conf[0]) == 8:
             #alright send data
-            sockC.sendall(tf.read())
+            sockC.sendall(data)
+            print("I sent")
         else:
             print("failure, no confirmation after sendFile size")
-    tf.close()
 
 def broadcastLS(connection,cliente):
     pass

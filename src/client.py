@@ -150,17 +150,19 @@ def pullArquivo(connection):
                 if (cmd[0]=='m'):
                     currDirectory = os.path.join(currDirectory,cmd[2:])
                 elif (cmd[0]=='s'):
-                    arqPath = os.path.join(currDirectory,cmd[2:])
-                    if not os.path.isdir(arqPath):
+                    dirPath = os.path.join(currDirectory,cmd[2:])
+                    if not os.path.isdir(dirPath):
                         print("diretório inexistente")
-                        arqPath=None
+                        dirPath=None
                 else:
                     print("Comando inválido")
             except:
                 print("cmd vazio")
         #alright I have the dir
-        finalfile = os.path.join()
-        with open(finalfile,"r+b") as ff:
+        finalfile = os.path.join(dirPath,arqName)
+        print(finalfile)
+        with open(finalfile,"wb") as ff:
+            print("error was not final file")
             tmp = open(location,"rb")
             ff.write(tmp.read())
             tmp.close()
@@ -171,7 +173,7 @@ def pullArquivo(connection):
 def takeFile(connection,pathToTmp):
     
     try :
-        with open(pathToTmp) as f:
+        with open(pathToTmp,"wb") as f:
             #I confirm intent do take
             msg = protocolo["READY"]
             connection.sendall(msg.encode())
@@ -244,8 +246,9 @@ def controlMain():
             else:
                 print("Comando não reconhecido")
                 showCommands=False
-        except:
+        except Exception as e:
             maintainFunc = False
+            print(repr(e))
     
     connectionSocket.close()
     print("control end")
