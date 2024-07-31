@@ -14,7 +14,7 @@ protocolo = {
     "PUSH" : "3 Push File Request\n",
     "LS": "4 LS Request\n",
     "LOGOUT": "5 Logout Warning\n",
-    "READY": "8 Ready to Recieve"
+    "READY": "8 Ready"
 }
 
 def pushData(connection):
@@ -68,30 +68,27 @@ def trySend(connection,path,filename):
     ans = connection.recv(2048).decode()
     print(ans)
     doit = True
-    if int(ans[0]) == 8:
+    if int(ans[0]) == 7:
         yn = input("File already in server, wish to overwrite?[Y/n]: ")
         if yn =="Y" or yn=="y":
-            connection.sendall(msg.encode()) #sending push again, I don't like putting it here  
+            connection.sendall(msg.encode()) #sending push again, I don't like putting it here 
+            ans = connection.recv(2048).decode()
         else:
-            doit = False
             print("canceling operation")
+            msg = protocolo["FAIL"]+credencial_g+"\n"
+            #this is gonna m
+            connection.sendall(msg.encode())
+            conf = connection.recv(2048)
             
     if int(ans[0]) == 0:
         print("manager killed itself")
         doit=False
         return #stop it now
     
-    if doit:
-        going = int(connection.recv(2048).decode()[0])
-        if going == 7:
-            sendFile(connection,path)
-        else:
-            print("manager didn't confirm to start recv")
+    if int(ans[0])==8:
+        sendFile(connection,path)
     else:
-        msg = protocolo["FAIL"]+credencial_g+"\n"
-        #this is gonna m
-        connection.sendall(msg.encode())
-        conf = connection.recv(2048) #important to happen, can be used to check
+        print("manager didn't confirm to start recv")
 
 
 def sendFile(connection,filePath):
@@ -109,7 +106,7 @@ def sendFile(connection,filePath):
             connection.sendall(struct.pack("<Q",ulliSize))
             #get confirmed
             conf = connection.recv(2048).decode()
-            if int(conf[0]) == 7:
+            if int(conf[0]) == 8:
                 #alright send data
                 with open(filePath,"rb") as data:
                     connection.sendall(data.read())
@@ -123,10 +120,7 @@ def pullArquivo(connection):
     connection.sendall(msg.encode())
     ans = connection.recv(2048).decode()
     if int(ans[0])!=0:
-        f = tempfile.NamedTemporaryFile(delete=False)
-        location = f.name
-        f.close()
-        takeFile(connection,location)
+        f = takeFile(connection)
 
         controlMessage = "Percorra o sistema de arquivos e selecione o diretório para o qual se deseja transferir utilizando os seguintes comandos:\nm-[NOME DO DIRETÓRIO] para mover de diretório.;\ns-[NOME DO DIRETÓRIO] para selecionar o arquivo para transferir\n"
         currDirectory = os.path.expanduser("~")
@@ -162,38 +156,49 @@ def pullArquivo(connection):
         finalfile = os.path.join(dirPath,arqName)
         print(finalfile)
         with open(finalfile,"wb") as ff:
-            print("error was not final file")
-            tmp = open(location,"rb")
+            #print("error was not final file")
+            tmp = open(f,"rb")
             ff.write(tmp.read())
             tmp.close()
             ff.close()
-        os.remove(location)
+        os.remove(f)
     print("donwload completo")
 
-def takeFile(connection,pathToTmp):
-    
+def takeFile(connection):
+    f = tempfile.NamedTemporaryFile(delete=False)
+    location = f.name
     try :
-        with open(pathToTmp,"wb") as f:
-            #I confirm intent do take
-            msg = protocolo["READY"]
-            connection.sendall(msg.encode())
-            ullSize = struct.unpack("<Q",connection.recv(struct.calcsize("<Q")))[0]
-            connection.sendall(msg.encode())
-            data = bytes()
-            now = 0
-            while now < ullSize:
-                chunk = connection.recv(2048)
-                now += len(chunk)
-                data += chunk
-            f.write(data)
+        #I confirm intent do take
+        msg = protocolo["READY"]
+        connection.sendall(msg.encode())
+        ullSize = struct.unpack("<Q",connection.recv(struct.calcsize("<Q")))[0]
+        connection.sendall(msg.encode())
+        data = bytes()
+        now = 0
+        while now < ullSize:
+            chunk = connection.recv(2048)
+            now += len(chunk)
+            data += chunk
+        f.write(data)
+        f.close()
+        return location
     except:
         print("takedata failure")
+        f.close()
+        os.remove(location)
 
 def lsCall(connection):
     global credencial_g
     msg = protocolo["LS"]+credencial_g+"\n"
     connection.sendall(msg.encode())
-    #TODO recieve
+    ans = connection.recv(2048).decode()
+    if (int(ans[0]))==4:
+        fp = takeFile(connection)
+        file = open(fp,"r")
+        print("your files:")
+        print(file.read())
+        file.close()
+        os.remove(fp)
 
 def login(connection,credencial):
     global credencial_g
@@ -239,7 +244,7 @@ def controlMain():
             elif (command==2):
                 pullArquivo(connectionSocket)
             elif (command==3):
-                pass
+                lsCall(connectionSocket)
             elif (command==4):
                 logout(connectionSocket)
                 maintainFunc=False

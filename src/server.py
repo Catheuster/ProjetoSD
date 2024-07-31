@@ -62,15 +62,14 @@ class ServerUnit:
         if (not os.path.isdir(insideLoc)):
             os.mkdir(insideLoc)
         abspath = os.path.join(insideLoc,fileName)
-        #print("going here>> "+repr(abspath))
         try :
             with open(abspath,"wb") as f:
                 #I confirm intent do take
                 msg = protocolo["READY"]
                 connection.sendall(msg.encode())
-                bla = connection.recv(struct.calcsize("<Q"))
-                print(struct.unpack("<Q",bla))
-                ullSize = struct.unpack("<Q",bla)[0]
+                #bla = connection.recv(struct.calcsize("<Q"))
+                #print(struct.unpack("<Q",bla))
+                ullSize = struct.unpack("<Q",connection.recv(struct.calcsize("<Q")))[0]
                 connection.sendall(msg.encode())
                 data = bytes()
                 now = 0
@@ -86,7 +85,7 @@ class ServerUnit:
 
     def sendFile(self,connection,filePath):
         #should be guarded, no none filePath
-        if filePath:
+        if os.path.exists(filePath) and not os.path.isdir(filePath):
             #just in case
             #connected should be already warned and waiting for file size
             ulliSize = os.path.getsize(filePath)
@@ -100,6 +99,11 @@ class ServerUnit:
                     connection.sendall(data.read())
             else:
                 print("failure, no confirmation after sendFile size")
+        else:
+            print("send file but no file")
+            #fail message
+            zero = 0
+            connection.sendall(struct.pack("<Q",zero))
 
     def replicate(self,usr,fileName,secdnServ):
         #when called, should have already taken
@@ -132,8 +136,7 @@ class ServerUnit:
             connection.sendall(message.encode())
             action = connection.recv(2048).decode()
             print(action)
-            if (int(action[0])==5):
-                #SEND OVER TODO figure this shi out
+            if (int(action[0])==8):
                 self.sendFile(connection,f)
                 pass
             elif (int(action[0])==6):
@@ -157,17 +160,21 @@ class ServerUnit:
 
     def lsCall(self,connection,user):
         usrDir = os.path.join(self.pathToOwnedFolder,user)
-        try:
-            _, _, files = (os.walk(usrDir))
-            tmpf = tempfile.NamedTemporaryFile(delete=False) #already in binary mode
+        if os.path.isdir(usrDir):
+            msg = protocolo["GOOD"]
+            connection.sendall(msg.encode())
+            _, _, files = next(os.walk(usrDir))
+            tmpf = tempfile.NamedTemporaryFile(mode="w",delete=False) #already in binary mode
             location = tmpf.name
-            tmpf.write(("\n".join(files)).encode())
+            tmpf.write(",".join(files))
             tmpf.close()
-            self.sendFile(connection, location)
+            ans = connection.recv(2048).decode()
+            if int(ans[0])==8:
+                self.sendFile(connection, location)
             os.remove(location)
             #should have only files as we do not have make dir functionality
-        except:
-            print("no folder of user")
+        else:
+            #print("no folder of user")
             message = protocolo["FAIL"]
             connection.sendall(message.encode())
 
@@ -211,9 +218,6 @@ class ServerUnit:
         if self.sock:
             try:
                 while self.I_listen:
-                    # espera por conexões
-                    # client_connection: o socket que será criado para trocar dados com o cliente de forma dedicada
-                    # client_address: tupla (IP do cliente, Porta do cliente)
                     connection, address = self.sock.accept()
                     connection.setsockopt(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)
                     client_thread = threading.Thread(target=self.requestHandler, args=(connection, address),
