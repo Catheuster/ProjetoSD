@@ -270,6 +270,7 @@ def broadcastLS(connection,cliente):
         return #END OF OPERATION
     data = ""
     for fp in lsFiles:
+        if not fp: continue
         f = open(fp,"r")
         #should all be just text files
         data += f.read()
@@ -340,7 +341,7 @@ def getLowestPing(ping_list):
     secondLowest = ('', float('inf'))
     secondLowest_index = 0
     for i in range(len(ping_list)):
-        if ping_list[i][1] < ping_list[i][1]:
+        if ping_list[i][1] < lowest[1]:
             secondLowest = lowest
             secondLowest_index = lowest_index
             lowest = ping_list[i]
