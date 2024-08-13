@@ -1,3 +1,6 @@
+import multiprocessing
+import re
+import subprocess
 import threading
 import socket
 import struct
@@ -244,6 +247,7 @@ def pullAndReturn(sockC,sockS):
 
 def broadcastLS(connection,cliente):
     global serverConectados_g
+    print(serverConectados_g)
     lsFiles = []
     for serv in serverConectados_g:
         try:
@@ -316,10 +320,44 @@ def targetPost(filepath,cliente,filename,serverFirst,serverRepl):
     else :
         print("failure at target post")
 
+def getServerPing(server):
+    try:
+        output = subprocess.check_output(['ping', '-c', '4', '-q', server[0]])
+        output = output.decode('utf8')
+        statistic = re.search(r'(\d+\.\d+/){3}\d+\.\d+', output).group(0)
+        avg_time = re.findall(r'\d+\.\d+', statistic)[1]
+        response_time = float(avg_time)
+
+    except subprocess.CalledProcessError:
+        response_time = 99999999
+    return (server, response_time)
+
+def getLowestPing(ping_list):
+    if len(ping_list) == 0:
+        return ping_list
+    lowest = ('', float('inf'))
+    lowest_index = 0
+    secondLowest = ('', float('inf'))
+    secondLowest_index = 0
+    for i in range(len(ping_list)):
+        if ping_list[i][1] < ping_list[i][1]:
+            secondLowest = lowest
+            secondLowest_index = lowest_index
+            lowest = ping_list[i]
+            lowest_index = i
+        elif ping_list[i][1] < secondLowest[1]:
+            secondLowest = ping_list[i]
+            secondLowest_index = i
+    return [lowest_index, secondLowest_index]
 
 def targetDecide():
     global serverConectados_g
-    return sample(range(len(serverConectados_g)),2)
+    pool = multiprocessing.Pool()
+    ping_list = pool.map(getServerPing,serverConectados_g)
+    chosen_servers = getLowestPing(ping_list)
+    print(chosen_servers)
+    return chosen_servers
+    # return sample(range(len(serverConectados_g)),2)
 
 def userLogin(credencial, connection):
     message = protocoloCliente["LOGIN"]+credencial
